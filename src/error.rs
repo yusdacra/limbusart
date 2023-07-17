@@ -5,6 +5,8 @@ use http::StatusCode;
 
 type BoxedError = Box<dyn std::error::Error>;
 
+pub(crate) type AppResult<T> = Result<T, AppError>;
+
 #[derive(Debug)]
 pub(crate) struct AppError {
     internal: BoxedError,

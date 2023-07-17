@@ -5,133 +5,21 @@ use axum::{
     Router,
 };
 use dashmap::DashMap;
-use error::AppError;
+use data::{Art, ArtKind, Data};
+use error::AppResult;
 use http::Uri;
 use std::{
-    collections::HashMap,
     ops::Deref,
-    str::FromStr,
     sync::{Arc, Mutex},
 };
 
+mod data;
 mod error;
-
-type AppResult<T> = Result<T, AppError>;
-
-#[derive(Clone)]
-enum ArtKind {
-    Twitter,
-    Safebooru,
-}
-
-impl FromStr for ArtKind {
-    type Err = AppError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "twitter.com" => Ok(Self::Twitter),
-            "safebooru.org" => Ok(Self::Safebooru),
-            _ => Err("not support website".into()),
-        }
-    }
-}
-
-#[derive(Clone)]
-struct Art {
-    url: Uri,
-    kind: ArtKind,
-}
-
-impl FromStr for Art {
-    type Err = AppError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let url: Uri = s.parse()?;
-        let kind: ArtKind = url.authority().unwrap().host().parse()?;
-
-        Ok(Self { url, kind })
-    }
-}
-
-struct Data {
-    // actual arts
-    art: Vec<Art>,
-    art_indices: HashMap<Uri, usize>,
-}
-
-impl Data {
-    fn parse(data: &str) -> AppResult<Self> {
-        let mut this = Self {
-            art: Default::default(),
-            art_indices: Default::default(),
-        };
-
-        for entry in data.lines() {
-            let art: Art = entry.parse()?;
-            this.art_indices.insert(art.url.clone(), this.art.len());
-            this.art.push(art);
-        }
-
-        Ok(this)
-    }
-
-    fn pick_random_art(&self) -> &Art {
-        let no = fastrand::usize(0..self.art.len());
-        &self.art[no]
-    }
-
-    fn reload(&mut self, data: &str) -> AppResult<()> {
-        for entry in data.lines() {
-            let art: Art = entry.parse()?;
-            if !self.art_indices.contains_key(&art.url) {
-                self.art_indices.insert(art.url.clone(), self.art.len());
-                self.art.push(art);
-            }
-        }
-        Ok(())
-    }
-}
-
-struct InternalAppState {
-    // cached direct links to images
-    direct_links: DashMap<Uri, String>,
-    data: Mutex<Data>,
-    http: reqwest::Client,
-}
-
-#[derive(Clone)]
-struct AppState {
-    internal: Arc<InternalAppState>,
-}
-
-impl AppState {
-    fn new(data: Data) -> Self {
-        Self {
-            internal: Arc::new(InternalAppState {
-                data: Mutex::new(data),
-                direct_links: Default::default(),
-                http: reqwest::ClientBuilder::new()
-                    .redirect(reqwest::redirect::Policy::none())
-                    .build()
-                    .unwrap(),
-            }),
-        }
-    }
-}
-
-impl Deref for AppState {
-    type Target = InternalAppState;
-
-    fn deref(&self) -> &Self::Target {
-        &self.internal
-    }
-}
-
-const ARTS_PATH: &str = "arts.txt";
 
 #[tokio::main]
 async fn main() {
-    let arts = std::fs::read_to_string(ARTS_PATH).unwrap();
+    let arts_file_path = get_conf("ARTS_PATH");
+    let arts = std::fs::read_to_string(&arts_file_path).unwrap();
     let state = AppState::new(Data::parse(&arts).unwrap());
 
     std::thread::spawn({
@@ -141,7 +29,7 @@ async fn main() {
         move || {
             let mut signals = Signals::new(&[SIGUSR2]).unwrap();
             for _ in signals.forever() {
-                let data = std::fs::read_to_string(ARTS_PATH).unwrap();
+                let data = std::fs::read_to_string(&arts_file_path).unwrap();
                 state.data.lock().unwrap().reload(&data).unwrap();
             }
         }
@@ -176,6 +64,11 @@ async fn show_art(state: State<AppState>) -> AppResult<axum::response::Response>
 }
 
 fn render_page(art: &Art, image_link: &str) -> Html<String> {
+    let title = get_conf("SITE_TITLE");
+    let embed_title = get_conf("EMBED_TITLE");
+    let embed_content = get_conf("EMBED_DESC");
+    let embed_color = get_conf("EMBED_COLOR");
+
     let body_style =
         "margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex;";
     let img_style = "display: block; margin: auto; max-height: 100vh; max-width: 100vw;";
@@ -184,10 +77,10 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
         (maud::DOCTYPE)
         head {
             meta charset="utf8";
-            meta property="og:title" content="random pm art here!!";
-            meta property="og:description" content="click NOW to see a random PM art";
-            meta name="theme-color" content="#bd0000";
-            title { "random pm art" }
+            meta property="og:title" content=(embed_title);
+            meta property="og:description" content=(embed_content);
+            meta name="theme-color" content=(embed_color);
+            title { (title) }
         }
         body style=(body_style) {
             img style=(img_style) src=(image_link);
@@ -242,4 +135,43 @@ async fn fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResul
         .to_str()?
         .to_owned();
     Ok(link)
+}
+
+fn get_conf(name: &str) -> String {
+    std::env::var(name).unwrap()
+}
+
+struct InternalAppState {
+    // cached direct links to images
+    direct_links: DashMap<Uri, String>,
+    data: Mutex<Data>,
+    http: reqwest::Client,
+}
+
+#[derive(Clone)]
+struct AppState {
+    internal: Arc<InternalAppState>,
+}
+
+impl AppState {
+    fn new(data: Data) -> Self {
+        Self {
+            internal: Arc::new(InternalAppState {
+                data: Mutex::new(data),
+                direct_links: Default::default(),
+                http: reqwest::ClientBuilder::new()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .unwrap(),
+            }),
+        }
+    }
+}
+
+impl Deref for AppState {
+    type Target = InternalAppState;
+
+    fn deref(&self) -> &Self::Target {
+        &self.internal
+    }
 }
