@@ -177,13 +177,13 @@ async fn show_art(
     {
         if agent.contains("Discordbot") {
             let request = state.http.get(&image_link).build()?;
-            let mut resp = state.http.execute(request).await?.error_for_status()?;
-            let content_type = resp.headers_mut().remove(http::header::CONTENT_TYPE);
+            let resp = state.http.execute(request).await?.error_for_status()?;
+            let headers = resp.headers().clone();
             let downloaded = resp.bytes().await?;
             let mut response = axum::response::Response::new(downloaded.into());
-            if let Some(v) = content_type {
-                response.headers_mut().insert(http::header::CONTENT_TYPE, v);
-            }
+            *response.headers_mut() = headers;
+            response.headers_mut().remove(http::header::CACHE_CONTROL);
+            response.headers_mut().remove(http::header::CACHE_STATUS);
             return Ok(response);
         }
     }
