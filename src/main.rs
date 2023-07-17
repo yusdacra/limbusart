@@ -21,6 +21,7 @@ type AppResult<T> = Result<T, AppError>;
 #[derive(Clone)]
 enum ArtKind {
     Twitter,
+    Safebooru,
 }
 
 impl FromStr for ArtKind {
@@ -29,6 +30,7 @@ impl FromStr for ArtKind {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "twitter.com" => Ok(Self::Twitter),
+            "safebooru.org" => Ok(Self::Safebooru),
             _ => Err("not support website".into()),
         }
     }
@@ -161,6 +163,7 @@ async fn show_art(state: State<AppState>) -> AppResult<axum::response::Response>
     } else {
         let image_link = match art.kind {
             ArtKind::Twitter => fetch_twitter_image_link(&state.http, &art.url).await?,
+            ArtKind::Safebooru => fetch_safebooru_image_link(&state.http, &art.url).await?,
         };
         state
             .direct_links
@@ -197,6 +200,30 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
         }
     };
     Html(content.into_string())
+}
+
+async fn fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppResult<String> {
+    let mut id = String::new();
+    for (name, value) in form_urlencoded::parse(url.query().unwrap().as_bytes()) {
+        if name == "id" {
+            id = value.into_owned();
+        }
+    }
+    if id.is_empty() {
+        return Err("no id?".into());
+    }
+
+    let url = format!("https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&id={id}");
+    let req = http.get(url).build()?;
+    let resp = http.execute(req).await?.error_for_status()?;
+    let data: Vec<serde_json::Map<String, serde_json::Value>> = resp.json().await?;
+
+    let image_filename = data[0].get("image").unwrap().as_str().unwrap();
+    let image_directory = data[0].get("directory").unwrap().as_str().unwrap();
+
+    Ok(format!(
+        "http://safebooru.org/images/{image_directory}/{image_filename}"
+    ))
 }
 
 async fn fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResult<String> {
