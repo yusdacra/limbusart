@@ -2,12 +2,18 @@ use axum::{extract::State, response::Html, routing::get, Router};
 use dashmap::DashMap;
 use error::AppError;
 use http::Uri;
-use std::{ops::Deref, str::FromStr, sync::Arc};
+use std::{
+    collections::HashMap,
+    ops::Deref,
+    str::FromStr,
+    sync::{atomic::AtomicBool, Arc, Mutex},
+};
 
 mod error;
 
 type AppResult<T> = Result<T, AppError>;
 
+#[derive(Clone)]
 enum ArtKind {
     Twitter,
 }
@@ -23,6 +29,7 @@ impl FromStr for ArtKind {
     }
 }
 
+#[derive(Clone)]
 struct Art {
     url: Uri,
     kind: ArtKind,
@@ -42,16 +49,19 @@ impl FromStr for Art {
 struct Data {
     // actual arts
     art: Vec<Art>,
+    art_indices: HashMap<Uri, usize>,
 }
 
 impl Data {
     fn parse(data: &str) -> AppResult<Self> {
         let mut this = Self {
             art: Default::default(),
+            art_indices: Default::default(),
         };
 
         for entry in data.lines() {
             let art: Art = entry.parse()?;
+            this.art_indices.insert(art.url.clone(), this.art.len());
             this.art.push(art);
         }
 
@@ -62,12 +72,23 @@ impl Data {
         let no = fastrand::usize(0..self.art.len());
         &self.art[no]
     }
+
+    fn reload(&mut self, data: &str) -> AppResult<()> {
+        for entry in data.lines() {
+            let art: Art = entry.parse()?;
+            if !self.art_indices.contains_key(&art.url) {
+                self.art_indices.insert(art.url.clone(), self.art.len());
+                self.art.push(art);
+            }
+        }
+        Ok(())
+    }
 }
 
 struct InternalAppState {
     // cached direct links to images
     direct_links: DashMap<Uri, String>,
-    data: Data,
+    data: Mutex<Data>,
     http: reqwest::Client,
 }
 
@@ -80,7 +101,7 @@ impl AppState {
     fn new(data: Data) -> Self {
         Self {
             internal: Arc::new(InternalAppState {
-                data,
+                data: Mutex::new(data),
                 direct_links: Default::default(),
                 http: reqwest::ClientBuilder::new()
                     .redirect(reqwest::redirect::Policy::none())
@@ -99,11 +120,27 @@ impl Deref for AppState {
     }
 }
 
+const ARTS_PATH: &str = "arts.txt";
+
 #[tokio::main]
 async fn main() {
-    let arts = std::fs::read_to_string("arts.txt").unwrap();
-    let data = AppState::new(Data::parse(&arts).unwrap());
-    let app = Router::new().route("/", get(show_art)).with_state(data);
+    let arts = std::fs::read_to_string(ARTS_PATH).unwrap();
+    let state = AppState::new(Data::parse(&arts).unwrap());
+
+    std::thread::spawn({
+        use signal_hook::{consts::SIGUSR2, iterator::Signals};
+
+        let state = state.clone();
+        move || {
+            let mut signals = Signals::new(&[SIGUSR2]).unwrap();
+            for _ in signals.forever() {
+                let data = std::fs::read_to_string(ARTS_PATH).unwrap();
+                state.data.lock().unwrap().reload(&data).unwrap();
+            }
+        }
+    });
+
+    let app = Router::new().route("/", get(show_art)).with_state(state);
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000")
         .await
@@ -113,15 +150,15 @@ async fn main() {
 }
 
 async fn show_art(state: State<AppState>) -> AppResult<Html<String>> {
-    let art = state.data.pick_random_art();
+    let art = state.data.lock().unwrap().pick_random_art().clone();
     if let Some(image_link) = state.direct_links.get(&art.url) {
-        Ok(render_page(art, &image_link))
+        Ok(render_page(&art, &image_link))
     } else {
         let image_link = match art.kind {
             ArtKind::Twitter => fetch_twitter_image_link(&state.http, &art.url).await?,
         };
-        let page = render_page(art, &image_link);
-        state.direct_links.insert(art.url.clone(), image_link);
+        let page = render_page(&art, &image_link);
+        state.direct_links.insert(art.url, image_link);
         Ok(page)
     }
 }
