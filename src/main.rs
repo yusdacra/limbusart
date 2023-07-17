@@ -89,6 +89,8 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
             }
             a style=(format!("{about_style} right: 0;")) href="https://gaze.systems" target="_blank" {
                 "website made by dusk"
+                br;
+                "report problems / feedback @ yusdacra on Discord"
             }
         }
     };
