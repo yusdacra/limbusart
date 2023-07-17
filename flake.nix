@@ -46,15 +46,16 @@
         };
 
         devShells.default = pkgs.mkShell {
+          name = "limbusart-shell";
+          
           inputsFrom = builtins.attrValues self.checks.${system};
 
-          # Additional dev-shell environment variables can be set directly
-          # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
-
           # Extra inputs can be added here
-          nativeBuildInputs = with pkgs; [
+          packages = with pkgs; [
             cargo
             rustc
+            rust-analyzer
+            rustfmt
           ];
         };
       });

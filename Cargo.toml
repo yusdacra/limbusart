@@ -1,8 +1,13 @@
 [package]
-name = "quick-start-simple"
+name = "limbusart"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+axum = {git = "https://github.com/tokio-rs/axum.git", version = "0.6"}
+tokio = {version = "1", features = ["rt-multi-thread", "macros"]}
+http = "0.2"
+fastrand = {version = "2", features = ["std"]}
+reqwest = {version = "0.11", default-features = false, features = ["rustls-tls-native-roots"]}
+dashmap = "5"
+maud = "0.25"
