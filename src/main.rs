@@ -181,7 +181,10 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
         (maud::DOCTYPE)
         head {
             meta charset="utf8";
-            title { "random limbussy art" }
+            meta property="og:title" content="random pm art here!!";
+            meta property="og:description" content="click NOW to see a random PM art";
+            meta name="theme-color" content="#bd0000";
+            title { "random pm art" }
         }
         body style=(body_style) {
             img style=(img_style) src=(image_link);
