@@ -154,10 +154,7 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn show_art(
-    state: State<AppState>,
-    headers: http::HeaderMap,
-) -> AppResult<axum::response::Response> {
+async fn show_art(state: State<AppState>) -> AppResult<axum::response::Response> {
     let art = state.data.lock().unwrap().pick_random_art().clone();
     let image_link = if let Some(image_link) = state.direct_links.get(&art.url) {
         image_link.to_string()
@@ -170,23 +167,6 @@ async fn show_art(
             .insert(art.url.clone(), image_link.clone());
         image_link
     };
-
-    if let Some(agent) = headers
-        .get(http::header::USER_AGENT)
-        .and_then(|h| h.to_str().ok())
-    {
-        if agent.contains("Discordbot") {
-            let request = state.http.get(&image_link).build()?;
-            let resp = state.http.execute(request).await?.error_for_status()?;
-            let headers = resp.headers().clone();
-            let downloaded = resp.bytes().await?;
-            let mut response = axum::response::Response::new(downloaded.into());
-            *response.headers_mut() = headers;
-            response.headers_mut().remove(http::header::CACHE_CONTROL);
-            response.headers_mut().remove(http::header::CACHE_STATUS);
-            return Ok(response);
-        }
-    }
 
     let page = render_page(&art, &image_link);
     Ok(page.into_response())
@@ -201,7 +181,6 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
         (maud::DOCTYPE)
         head {
             meta charset="utf8";
-            meta property="og:image" content=(image_link);
             title { "random limbussy art" }
         }
         body style=(body_style) {
