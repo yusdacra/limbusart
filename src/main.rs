@@ -1,4 +1,9 @@
-use axum::{extract::State, response::Html, routing::get, Router};
+use axum::{
+    extract::State,
+    response::{Html, IntoResponse},
+    routing::get,
+    Router,
+};
 use dashmap::DashMap;
 use error::AppError;
 use http::Uri;
@@ -6,7 +11,7 @@ use std::{
     collections::HashMap,
     ops::Deref,
     str::FromStr,
-    sync::{atomic::AtomicBool, Arc, Mutex},
+    sync::{Arc, Mutex},
 };
 
 mod error;
@@ -149,18 +154,42 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn show_art(state: State<AppState>) -> AppResult<Html<String>> {
+async fn show_art(
+    state: State<AppState>,
+    headers: http::HeaderMap,
+) -> AppResult<axum::response::Response> {
     let art = state.data.lock().unwrap().pick_random_art().clone();
-    if let Some(image_link) = state.direct_links.get(&art.url) {
-        Ok(render_page(&art, &image_link))
+    let image_link = if let Some(image_link) = state.direct_links.get(&art.url) {
+        image_link.to_string()
     } else {
         let image_link = match art.kind {
             ArtKind::Twitter => fetch_twitter_image_link(&state.http, &art.url).await?,
         };
-        let page = render_page(&art, &image_link);
-        state.direct_links.insert(art.url, image_link);
-        Ok(page)
+        state
+            .direct_links
+            .insert(art.url.clone(), image_link.clone());
+        image_link
+    };
+
+    if let Some(agent) = headers
+        .get(http::header::USER_AGENT)
+        .and_then(|h| h.to_str().ok())
+    {
+        if agent.contains("Discordbot") {
+            let request = state.http.get(&image_link).build()?;
+            let mut resp = state.http.execute(request).await?.error_for_status()?;
+            let content_type = resp.headers_mut().remove(http::header::CONTENT_TYPE);
+            let downloaded = resp.bytes().await?;
+            let mut response = axum::response::Response::new(downloaded.into());
+            if let Some(v) = content_type {
+                response.headers_mut().insert(http::header::CONTENT_TYPE, v);
+            }
+            return Ok(response);
+        }
     }
+
+    let page = render_page(&art, &image_link);
+    Ok(page.into_response())
 }
 
 fn render_page(art: &Art, image_link: &str) -> Html<String> {
