@@ -134,9 +134,9 @@ async fn fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResul
         .headers()
         .get(http::header::LOCATION)
         .unwrap()
-        .to_str()?
-        .to_owned();
-    Ok(link)
+        .to_str()?;
+    // use webp format for direct twitter links since webp is cheaper
+    Ok(format!("{link}?format=webp"))
 }
 
 fn get_conf(name: &str) -> String {
