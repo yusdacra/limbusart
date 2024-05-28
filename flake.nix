@@ -15,23 +15,10 @@
   outputs = { self, nixpkgs, crane, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-        };
-
-        craneLib = crane.lib.${system};
+        pkgs = nixpkgs.legacyPackages.${system};
+        craneLib = crane.mkLib pkgs;
         my-crate = craneLib.buildPackage {
           src = craneLib.cleanCargoSource (craneLib.path ./.);
-
-          buildInputs = [
-            # Add additional build inputs here
-          ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
-            # Additional darwin specific inputs can be set here
-            pkgs.libiconv
-          ];
-
-          # Additional environment variables can be set directly
-          # MY_CUSTOM_VAR = "some value";
         };
       in
       {
@@ -50,7 +37,6 @@
           
           inputsFrom = builtins.attrValues self.checks.${system};
 
-          # Extra inputs can be added here
           packages = with pkgs; [
             cargo
             rustc
