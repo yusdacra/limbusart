@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use axum::response::IntoResponse;
+use axum::response::{Html, IntoResponse};
 use http::StatusCode;
 
 type BoxedError = Box<dyn std::error::Error>;
@@ -34,11 +34,31 @@ where
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        (
-            self.status.unwrap_or(StatusCode::INTERNAL_SERVER_ERROR),
-            format!("Something went wrong: {}", self.internal),
-        )
-            .into_response()
+        let title = crate::get_conf("SITE_TITLE");
+
+        let pre_escaped = maud::html! {
+            (maud::DOCTYPE)
+            head {
+                meta charset="utf8";
+                title { (title) }
+            }
+            body style=(crate::BODY_STYLE) {
+                p style=(format!("{} font-size: 2em;", crate::IMG_STYLE)) {
+                    "Something went wrong"
+                    self.internal;
+                }
+                a style=(format!("{} right: 0;", crate::ABOUT_STYLE)) href="https://gaze.systems" target="_blank" {
+                    "website made by dusk"
+                    br;
+                    "report problems / feedback @ yusdacra on Discord"
+                }
+            }
+        };
+        let mut resp = Html(pre_escaped.into_string()).into_response();
+
+        *resp.status_mut() = self.status.unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+
+        resp
     }
 }
 

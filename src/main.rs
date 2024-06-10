@@ -63,16 +63,17 @@ async fn show_art(state: State<AppState>) -> AppResult<axum::response::Response>
     Ok(page.into_response())
 }
 
+const BODY_STYLE: &str =
+"margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex;";
+const IMG_STYLE: &str = "display: block; margin: auto; max-height: 100vh; max-width: 100vw;";
+const ABOUT_STYLE: &str = "position: absolute; bottom: 0; font-size: 0.75em; color: #ffffff; background-color: #0e0e0eaa;";
+
 fn render_page(art: &Art, image_link: &str) -> Html<String> {
     let title = get_conf("SITE_TITLE");
     let embed_title = get_conf("EMBED_TITLE");
     let embed_content = get_conf("EMBED_DESC");
     let embed_color = get_conf("EMBED_COLOR");
 
-    let body_style =
-        "margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex;";
-    let img_style = "display: block; margin: auto; max-height: 100vh; max-width: 100vw;";
-    let about_style = "position: absolute; bottom: 0; font-size: 0.75em; color: #ffffff; background-color: #0e0e0eaa;";
     let content = maud::html! {
         (maud::DOCTYPE)
         head {
@@ -82,12 +83,12 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
             meta name="theme-color" content=(embed_color);
             title { (title) }
         }
-        body style=(body_style) {
-            img style=(img_style) src=(image_link);
-            a style=(format!("{about_style} left: 0;")) href=(art.url) target="_blank" {
+        body style=(BODY_STYLE) {
+            img style=(IMG_STYLE) src=(image_link);
+            a style=(format!("{ABOUT_STYLE} left: 0;")) href=(art.url) target="_blank" {
                 "source: " (art.url)
             }
-            a style=(format!("{about_style} right: 0;")) href="https://gaze.systems" target="_blank" {
+            a style=(format!("{ABOUT_STYLE} right: 0;")) href="https://gaze.systems" target="_blank" {
                 "website made by dusk"
                 br;
                 "report problems / feedback @ yusdacra on Discord"
