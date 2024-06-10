@@ -64,7 +64,7 @@ async fn show_art(state: State<AppState>) -> AppResult<axum::response::Response>
 }
 
 const BODY_STYLE: &str =
-"margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex;";
+"margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex; font-family: \"Kode Mono\", monospace; font-weight: 400; font-style: normal; font-optical-sizing: auto;";
 const IMG_STYLE: &str = "display: block; margin: auto; max-height: 100vh; max-width: 100vw;";
 const ABOUT_STYLE: &str = "position: absolute; bottom: 0; font-size: 0.75em; color: #ffffff; background-color: #0e0e0eaa;";
 
@@ -81,6 +81,9 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
             meta property="og:title" content=(embed_title);
             meta property="og:description" content=(embed_content);
             meta name="theme-color" content=(embed_color);
+            link rel="preconnect" href="https://fonts.googleapis.com";
+            link rel="preconnect" href="https://fonts.gstatic.com" crossorigin;
+            link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kode+Mono&display=swap";
             title { (title) }
         }
         body style=(BODY_STYLE) {

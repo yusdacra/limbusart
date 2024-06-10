@@ -40,11 +40,15 @@ impl IntoResponse for AppError {
             (maud::DOCTYPE)
             head {
                 meta charset="utf8";
+                link rel="preconnect" href="https://fonts.googleapis.com";
+                link rel="preconnect" href="https://fonts.gstatic.com" crossorigin;
+                link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kode+Mono&display=swap";
                 title { (title) }
             }
             body style=(crate::BODY_STYLE) {
                 p style=(format!("{} font-size: 1.3em;", crate::IMG_STYLE)) {
                     "Something went wrong: "
+                    br;
                     (self.internal.to_string());
                 }
                 a style=(format!("{} right: 0;", crate::ABOUT_STYLE)) href="https://gaze.systems" target="_blank" {
