@@ -43,8 +43,8 @@ impl IntoResponse for AppError {
                 title { (title) }
             }
             body style=(crate::BODY_STYLE) {
-                p style=(format!("{} font-size: 2em;", crate::IMG_STYLE)) {
-                    "Something went wrong"
+                p style=(format!("{} font-size: 1.3em;", crate::IMG_STYLE)) {
+                    "Something went wrong: "
                     (self.internal.to_string());
                 }
                 a style=(format!("{} right: 0;", crate::ABOUT_STYLE)) href="https://gaze.systems" target="_blank" {
