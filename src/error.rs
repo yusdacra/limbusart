@@ -34,16 +34,10 @@ where
 
 impl IntoResponse for AppError {
     fn into_response(self) -> axum::response::Response {
-        let title = crate::get_conf("SITE_TITLE");
-
         let pre_escaped = maud::html! {
             (maud::DOCTYPE)
             head {
-                meta charset="utf8";
-                link rel="preconnect" href="https://fonts.googleapis.com";
-                link rel="preconnect" href="https://fonts.gstatic.com" crossorigin;
-                link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kode+Mono&display=swap";
-                title { (title) }
+                (crate::get_page_head_common())
             }
             body style=(crate::BODY_STYLE) {
                 p style=(format!("{} font-size: 1.3em;", crate::IMG_STYLE)) {

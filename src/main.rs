@@ -8,6 +8,7 @@ use dashmap::DashMap;
 use data::{Art, ArtKind, Data};
 use error::AppResult;
 use http::Uri;
+use maud::PreEscaped;
 use std::{
     ops::Deref,
     sync::{Arc, Mutex},
@@ -68,8 +69,18 @@ const BODY_STYLE: &str =
 const IMG_STYLE: &str = "display: block; margin: auto; max-height: 100vh; max-width: 100vw;";
 const ABOUT_STYLE: &str = "position: absolute; bottom: 0; font-size: 0.75em; color: #ffffff; background-color: #0e0e0eaa;";
 
-fn render_page(art: &Art, image_link: &str) -> Html<String> {
+fn get_page_head_common() -> PreEscaped<String> {
     let title = get_conf("SITE_TITLE");
+    maud::html! {
+        meta charset="utf8";
+        link rel="preconnect" href="https://fonts.googleapis.com";
+        link rel="preconnect" href="https://fonts.gstatic.com" crossorigin;
+        link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kode+Mono&display=swap";
+        title { (title) }
+    }
+}
+
+fn render_page(art: &Art, image_link: &str) -> Html<String> {
     let embed_title = get_conf("EMBED_TITLE");
     let embed_content = get_conf("EMBED_DESC");
     let embed_color = get_conf("EMBED_COLOR");
@@ -77,14 +88,10 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
     let content = maud::html! {
         (maud::DOCTYPE)
         head {
-            meta charset="utf8";
+            (get_page_head_common())
             meta property="og:title" content=(embed_title);
             meta property="og:description" content=(embed_content);
             meta name="theme-color" content=(embed_color);
-            link rel="preconnect" href="https://fonts.googleapis.com";
-            link rel="preconnect" href="https://fonts.gstatic.com" crossorigin;
-            link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kode+Mono&display=swap";
-            title { (title) }
         }
         body style=(BODY_STYLE) {
             img style=(IMG_STYLE) src=(image_link);
