@@ -128,12 +128,12 @@ async fn fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResul
         .path_and_query(url.path_and_query().unwrap().clone())
         .build()?
         .to_string();
-    let req = http.get(fxurl).build()?;
+    let req = http.get(&fxurl).build()?;
     let resp = http.execute(req).await?.error_for_status()?;
     let link = resp
         .headers()
         .get(http::header::LOCATION)
-        .unwrap()
+        .ok_or_else(|| format!("twitter link {fxurl} did not return an image location"))?
         .to_str()?;
     // use webp format for direct twitter links since webp is cheaper
     Ok(format!("{link}?format=webp"))

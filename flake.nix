@@ -8,14 +8,19 @@
       url = "github:ipetkov/crane";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+  
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
 
     flake-utils.url = "github:numtide/flake-utils";
   };
 
-  outputs = { self, nixpkgs, crane, flake-utils, ... }:
+  outputs = { self, nixpkgs, crane, flake-utils, rust-overlay, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        pkgs = nixpkgs.legacyPackages.${system}.appendOverlays [(import rust-overlay)];
         craneLib = crane.mkLib pkgs;
         my-crate = craneLib.buildPackage {
           src = craneLib.cleanCargoSource (craneLib.path ./.);
@@ -39,9 +44,7 @@
 
           packages = with pkgs; [
             cargo
-            rustc
-            rust-analyzer
-            rustfmt
+            (rust-bin.stable.latest.default.override {extensions = ["rust-src"];})
           ];
         };
       });
