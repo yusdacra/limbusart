@@ -45,7 +45,7 @@ impl IntoResponse for AppError {
             body style=(crate::BODY_STYLE) {
                 p style=(format!("{} font-size: 2em;", crate::IMG_STYLE)) {
                     "Something went wrong"
-                    self.internal;
+                    (self.internal.to_string());
                 }
                 a style=(format!("{} right: 0;", crate::ABOUT_STYLE)) href="https://gaze.systems" target="_blank" {
                     "website made by dusk"
