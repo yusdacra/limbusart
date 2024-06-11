@@ -189,6 +189,7 @@ impl AppState {
                 direct_links: Default::default(),
                 http: reqwest::ClientBuilder::new()
                     .redirect(reqwest::redirect::Policy::none())
+                    .user_agent("limbusart 0.1.0")
                     .build()
                     .unwrap(),
             }),
