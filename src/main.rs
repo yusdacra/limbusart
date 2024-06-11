@@ -45,8 +45,21 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-#[axum::debug_handler]
-async fn show_art(state: State<AppState>) -> AppResult<axum::response::Response> {
+async fn show_art(
+    headers: axum::http::HeaderMap,
+    state: State<AppState>,
+) -> AppResult<axum::response::Response> {
+    let ua = headers
+        .get(http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("<unknown agent>");
+    let realip = headers
+        .get("x-real-ip")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("<unknown ip>");
+
+    println!("serving user {ua} from {realip}");
+
     let art = state.data.lock().unwrap().pick_random_art().clone();
     let image_link = if let Some(image_link) = state.direct_links.get(&art.url) {
         image_link.to_string()
@@ -72,8 +85,15 @@ const ABOUT_STYLE: &str = "position: absolute; bottom: 0; font-size: 0.75em; col
 
 fn get_page_head_common() -> PreEscaped<String> {
     let title = get_conf("SITE_TITLE");
+    let embed_title = get_conf("EMBED_TITLE");
+    let embed_content = get_conf("EMBED_DESC");
+    let embed_color = get_conf("EMBED_COLOR");
+
     maud::html! {
         meta charset="utf8";
+        meta property="og:title" content=(embed_title);
+        meta property="og:description" content=(embed_content);
+        meta name="theme-color" content=(embed_color);
         link rel="preconnect" href="https://fonts.googleapis.com";
         link rel="preconnect" href="https://fonts.gstatic.com" crossorigin;
         link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Mono&display=swap";
@@ -81,29 +101,28 @@ fn get_page_head_common() -> PreEscaped<String> {
     }
 }
 
-fn render_page(art: &Art, image_link: &str) -> Html<String> {
-    let embed_title = get_conf("EMBED_TITLE");
-    let embed_content = get_conf("EMBED_DESC");
-    let embed_color = get_conf("EMBED_COLOR");
+fn get_page_contact() -> PreEscaped<String> {
+    maud::html! {
+        a style=(format!("{ABOUT_STYLE} right: 0;")) href="https://gaze.systems" target="_blank" {
+            "website made by dusk"
+            br;
+            "report problems / feedback @ yusdacra on Discord"
+        }
+    }
+}
 
+fn render_page(art: &Art, image_link: &str) -> Html<String> {
     let content = maud::html! {
         (maud::DOCTYPE)
         head {
             (get_page_head_common())
-            meta property="og:title" content=(embed_title);
-            meta property="og:description" content=(embed_content);
-            meta name="theme-color" content=(embed_color);
         }
         body style=(BODY_STYLE) {
             img style=(IMG_STYLE) src=(image_link);
             a style=(format!("{ABOUT_STYLE} left: 0;")) href=(art.url) target="_blank" {
                 "source: " (art.url)
             }
-            a style=(format!("{ABOUT_STYLE} right: 0;")) href="https://gaze.systems" target="_blank" {
-                "website made by dusk"
-                br;
-                "report problems / feedback @ yusdacra on Discord"
-            }
+            (get_page_contact())
         }
     };
     Html(content.into_string())
