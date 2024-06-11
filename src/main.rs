@@ -7,7 +7,6 @@ use axum::{
 use dashmap::DashMap;
 use data::{Art, ArtKind, Data};
 use error::AppResult;
-use futures_util::TryFutureExt;
 use http::Uri;
 use maud::PreEscaped;
 use std::{
@@ -123,20 +122,31 @@ async fn fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppRes
 
     let url = format!("https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&id={id}");
     type Data = Vec<serde_json::Map<String, serde_json::Value>>;
-    async fn try_request(count: usize, url: &str, http: &reqwest::Client) -> AppResult<Data> {
-        println!("[safebooru] trying to fetch url (count {count}): {url}");
-        let req = http.get(url).build()?;
-        let resp = http.execute(req).await?.error_for_status()?;
-        let data = resp.json::<Data>().await?;
-        AppResult::Ok(data)
-    }
+    let try_request = || {
+        let url = url.clone();
+        let http = http.clone();
+        async move {
+            println!("[safebooru] trying to fetch url (count 0): {url}");
+            let req = http.get(url).build()?;
+            let resp = http.execute(req).await?.error_for_status()?;
+            let data = resp.json::<Data>().await?;
+            AppResult::Ok(data)
+        }
+    };
 
-    let data = try_request(0, &url, http)
-        .or_else(|_| try_request(1, &url, http))
-        .or_else(|_| try_request(2, &url, http))
-        .or_else(|_| try_request(3, &url, http))
-        .or_else(|_| try_request(4, &url, http))
-        .await?;
+    let mut attempts: usize = 0;
+    let (data, _) = futures_retry::FutureRetry::new(try_request, |e| {
+        if attempts > 4 {
+            futures_retry::RetryPolicy::<error::AppError>::ForwardError(e)
+        } else {
+            attempts += 1;
+            futures_retry::RetryPolicy::<error::AppError>::WaitRetry(
+                std::time::Duration::from_secs(1),
+            )
+        }
+    })
+    .await
+    .map_err(|(e, _)| e)?;
 
     let image_filename = data[0].get("image").unwrap().as_str().unwrap();
     let image_directory = data[0].get("directory").unwrap().as_str().unwrap();
