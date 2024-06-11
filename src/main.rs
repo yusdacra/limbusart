@@ -120,6 +120,7 @@ async fn fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppRes
     }
 
     let url = format!("https://safebooru.org/index.php?page=dapi&s=post&q=index&json=1&id={id}");
+    println!("[safebooru] trying to fetch url: {url}");
     let req = http.get(url).build()?;
     let resp = http.execute(req).await?.error_for_status()?;
     let data: Vec<serde_json::Map<String, serde_json::Value>> = resp.json().await?;
@@ -139,6 +140,7 @@ async fn fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResul
         .path_and_query(url.path_and_query().unwrap().clone())
         .build()?
         .to_string();
+    println!("[fxtwitter] trying to fetch url: {fxurl}");
     let req = http.get(&fxurl).build()?;
     let resp = http.execute(req).await?.error_for_status()?;
     let link = resp
