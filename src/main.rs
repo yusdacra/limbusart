@@ -126,7 +126,7 @@ async fn fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppRes
         let url = url.clone();
         let http = http.clone();
         async move {
-            println!("[safebooru] trying to fetch url (count 0): {url}");
+            println!("[safebooru] trying to fetch url: {url}");
             let req = http.get(url).build()?;
             let resp = http.execute(req).await?.error_for_status()?;
             let data = resp.json::<Data>().await?;
@@ -140,9 +140,8 @@ async fn fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppRes
             futures_retry::RetryPolicy::<error::AppError>::ForwardError(e)
         } else {
             attempts += 1;
-            futures_retry::RetryPolicy::<error::AppError>::WaitRetry(
-                std::time::Duration::from_secs(1),
-            )
+            println!("[safebooru] retrying url fetch (attempt {attempts}): {url}");
+            futures_retry::RetryPolicy::<error::AppError>::Repeat
         }
     })
     .await
