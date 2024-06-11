@@ -45,11 +45,7 @@ impl IntoResponse for AppError {
                     br;
                     (self.internal.to_string());
                 }
-                a style=(format!("{} right: 0;", crate::ABOUT_STYLE)) href="https://gaze.systems" target="_blank" {
-                    "website made by dusk"
-                    br;
-                    "report problems / feedback @ yusdacra on Discord"
-                }
+                (crate::get_page_contact())
             }
         };
         let mut resp = Html(pre_escaped.into_string()).into_response();
