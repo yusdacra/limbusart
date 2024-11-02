@@ -84,7 +84,7 @@ async fn show_art(
 
 const BODY_STYLE: &str =
 "color: #ffffff; margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex; font-family: \"PT Mono\", monospace; font-weight: 400; font-style: normal; font-optical-sizing: auto;";
-const ABOUT_STYLE: &str = "position: absolute; bottom: 0; font-size: 0.75em; color: #ffffff; background-color: #0e0e0eaa;";
+const ABOUT_STYLE: &str = "font-size: 1vmax; color: #ffffff;";
 
 fn get_page_head_common() -> PreEscaped<String> {
     let title = get_conf("SITE_TITLE").unwrap_or_else(|| "random project moon art".to_string());
@@ -129,10 +129,12 @@ fn render_page(art: &Art, image_link: &FetchedLink) -> Html<String> {
                 div class="throbber-loader" style="position: absolute; top: 50%; left: 50%; z-index: -1;" {}
                 img style="max-height: 98vh; max-width: 98vw;" src=(image_link.image_url);
             }
-            a style=(format!("{ABOUT_STYLE} left: 0;")) href=(art_url) target="_blank" {
-                "source: " (art_url)
+            div style="position: absolute; bottom: 0; display: flex; flex-direction: column; gap: 2vh; background-color: #0e0e0eaa;" {
+                a style=(format!("{ABOUT_STYLE} left: 0;")) href=(art_url) target="_blank" {
+                    "source: " (art_url)
+                }
+                (get_page_contact())
             }
-            (get_page_contact())
         }
     };
     Html(content.into_string())
