@@ -40,7 +40,7 @@ impl IntoResponse for AppError {
                 (crate::get_page_head_common())
             }
             body style=(crate::BODY_STYLE) {
-                p style=(format!("{} font-size: 1.3em;", crate::IMG_STYLE)) {
+                p style=("display: block; margin: auto; font-size: 1.3em;") {
                     "Something went wrong: "
                     br;
                     (self.internal.to_string());

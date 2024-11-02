@@ -77,3 +77,9 @@ impl Data {
         Ok(())
     }
 }
+
+#[derive(Clone)]
+pub(crate) struct FetchedLink {
+    pub(crate) image_url: String,
+    pub(crate) new_source: Option<Uri>,
+}

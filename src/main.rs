@@ -5,12 +5,14 @@ use axum::{
     Router,
 };
 use dashmap::DashMap;
-use data::{Art, ArtKind, Data};
-use error::AppResult;
+use data::{Art, ArtKind, Data, FetchedLink};
+use error::{AppError, AppResult};
+use futures_util::{future::BoxFuture, FutureExt};
 use http::Uri;
 use maud::PreEscaped;
 use std::{
     ops::Deref,
+    str::FromStr,
     sync::{Arc, Mutex},
 };
 
@@ -19,10 +21,11 @@ mod error;
 
 #[tokio::main]
 async fn main() {
-    let arts_file_path = get_conf("ARTS_PATH");
+    let arts_file_path = get_conf("ARTS_PATH").unwrap_or_else(|| "./utils/arts.txt".to_string());
     let arts = std::fs::read_to_string(&arts_file_path).unwrap();
     let state = AppState::new(Data::parse(&arts).unwrap());
 
+    #[cfg(not(windows))]
     std::thread::spawn({
         use signal_hook::{consts::SIGUSR2, iterator::Signals};
 
@@ -62,12 +65,13 @@ async fn show_art(
 
     let art = state.data.lock().unwrap().pick_random_art().clone();
     let image_link = if let Some(image_link) = state.direct_links.get(&art.url) {
-        image_link.to_string()
+        image_link.clone()
     } else {
-        let image_link = match art.kind {
-            ArtKind::Twitter => fetch_twitter_image_link(&state.http, &art.url).await?,
-            ArtKind::Safebooru => fetch_safebooru_image_link(&state.http, &art.url).await?,
+        let image_link_fn = match art.kind {
+            ArtKind::Twitter => fetch_twitter_image_link,
+            ArtKind::Safebooru => fetch_safebooru_image_link,
         };
+        let image_link = (image_link_fn)(&state.http, &art.url).await?;
         state
             .direct_links
             .insert(art.url.clone(), image_link.clone());
@@ -79,15 +83,16 @@ async fn show_art(
 }
 
 const BODY_STYLE: &str =
-"margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex; font-family: \"PT Mono\", monospace; font-weight: 400; font-style: normal; font-optical-sizing: auto;";
-const IMG_STYLE: &str = "display: block; margin: auto; max-height: 100vh; max-width: 100vw;";
+"color: #ffffff; margin: 0px; background: #0e0e0e; height: 100vh; width: 100vw; display: flex; font-family: \"PT Mono\", monospace; font-weight: 400; font-style: normal; font-optical-sizing: auto;";
 const ABOUT_STYLE: &str = "position: absolute; bottom: 0; font-size: 0.75em; color: #ffffff; background-color: #0e0e0eaa;";
 
 fn get_page_head_common() -> PreEscaped<String> {
-    let title = get_conf("SITE_TITLE");
-    let embed_title = get_conf("EMBED_TITLE");
-    let embed_content = get_conf("EMBED_DESC");
-    let embed_color = get_conf("EMBED_COLOR");
+    let title = get_conf("SITE_TITLE").unwrap_or_else(|| "random project moon art".to_string());
+    let embed_title =
+        get_conf("EMBED_TITLE").unwrap_or_else(|| "random project moon art".to_string());
+    let embed_content =
+        get_conf("EMBED_DESC").unwrap_or_else(|| "random project moon art".to_string());
+    let embed_color = get_conf("EMBED_COLOR").unwrap_or_else(|| "#ffffff".to_string());
 
     maud::html! {
         meta charset="utf8";
@@ -97,6 +102,7 @@ fn get_page_head_common() -> PreEscaped<String> {
         link rel="preconnect" href="https://fonts.googleapis.com";
         link rel="preconnect" href="https://fonts.gstatic.com" crossorigin;
         link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=PT+Mono&display=swap";
+        link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@chgibb/css-spinners@2.2.1/css/spinners.min.css";
         title { (title) }
     }
 }
@@ -111,16 +117,20 @@ fn get_page_contact() -> PreEscaped<String> {
     }
 }
 
-fn render_page(art: &Art, image_link: &str) -> Html<String> {
+fn render_page(art: &Art, image_link: &FetchedLink) -> Html<String> {
+    let art_url = image_link.new_source.as_ref().unwrap_or(&art.url);
     let content = maud::html! {
         (maud::DOCTYPE)
         head {
             (get_page_head_common())
         }
         body style=(BODY_STYLE) {
-            img style=(IMG_STYLE) src=(image_link);
-            a style=(format!("{ABOUT_STYLE} left: 0;")) href=(art.url) target="_blank" {
-                "source: " (art.url)
+            div style="display: block; margin: auto; max-height: 98vh; max-width: 98vw;" {
+                div class="throbber-loader" style="position: absolute; top: 50%; left: 50%; z-index: -1;" {}
+                img style="max-height: 98vh; max-width: 98vw;" src=(image_link.image_url);
+            }
+            a style=(format!("{ABOUT_STYLE} left: 0;")) href=(art_url) target="_blank" {
+                "source: " (art_url)
             }
             (get_page_contact())
         }
@@ -128,7 +138,21 @@ fn render_page(art: &Art, image_link: &str) -> Html<String> {
     Html(content.into_string())
 }
 
-async fn fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppResult<String> {
+fn fetch_safebooru_image_link<'a>(
+    http: &'a reqwest::Client,
+    url: &'a Uri,
+) -> BoxFuture<'a, AppResult<FetchedLink>> {
+    _fetch_safebooru_image_link(http, url).boxed()
+}
+
+fn fetch_twitter_image_link<'a>(
+    http: &'a reqwest::Client,
+    url: &'a Uri,
+) -> BoxFuture<'a, AppResult<FetchedLink>> {
+    _fetch_twitter_image_link(http, url).boxed()
+}
+
+async fn _fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppResult<FetchedLink> {
     let mut id = String::new();
     for (name, value) in form_urlencoded::parse(url.query().unwrap().as_bytes()) {
         if name == "id" {
@@ -166,15 +190,85 @@ async fn fetch_safebooru_image_link(http: &reqwest::Client, url: &Uri) -> AppRes
     .await
     .map_err(|(e, _)| e)?;
 
-    let image_filename = data[0].get("image").unwrap().as_str().unwrap();
-    let image_directory = data[0].get("directory").unwrap().as_str().unwrap();
+    let source_url = data[0]
+        .get("source")
+        .and_then(|src| Uri::from_str(src.as_str()?).ok())
+        .map(|src| {
+            if src.host() == Some("i.pximg.net") {
+                let post_id = src
+                    .path()
+                    .split('/')
+                    .last()
+                    .unwrap()
+                    .split("_")
+                    .next()
+                    .unwrap();
+                return Uri::builder()
+                    .scheme("https")
+                    .authority("pixiv.net")
+                    .path_and_query(format!("/en/artworks/{post_id}"))
+                    .build()
+                    .unwrap();
+            } else {
+                src
+            }
+        });
 
-    Ok(format!(
-        "http://safebooru.org/images/{image_directory}/{image_filename}"
-    ))
+    if source_url.as_ref().map_or(false, |src| {
+        src.host().unwrap().contains("twitter.com") || src.host().unwrap().contains("x.com")
+    }) {
+        let url = source_url.clone().unwrap();
+        println!("[safebooru] source was twitter, will try to fetch image from there instead");
+        if let Ok(mut fetched) = _fetch_twitter_image_link(http, &url).await {
+            println!("[safebooru] fetched image from twitter");
+            fetched.new_source = Some(url);
+            return Ok(fetched);
+        }
+    }
+
+    let sample_url = data[0]
+        .get("sample_url")
+        .ok_or("safebooru did not return sample url")?
+        .as_str()
+        .ok_or("safebooru sample url wasnt a string")?;
+    let sample_url = Uri::from_str(sample_url)
+        .map_err(|err| AppError::from(format!("safebooru sample url was not valid: {err}")))?;
+
+    let fsample_url = format!(
+        "{}://{}{}",
+        sample_url.scheme_str().unwrap(),
+        sample_url.host().unwrap(),
+        sample_url.path()
+    );
+    let ssample_url = format!(
+        "{}://{}/{}",
+        sample_url.scheme_str().unwrap(),
+        sample_url.host().unwrap(),
+        sample_url.path()
+    );
+
+    let fsample_resp = http
+        .execute(http.get(&fsample_url).build()?)
+        .await
+        .and_then(|resp| resp.error_for_status());
+    let ssample_resp = http
+        .execute(http.get(&ssample_url).build()?)
+        .await
+        .and_then(|resp| resp.error_for_status());
+
+    let sample_url = fsample_resp
+        .is_ok()
+        .then(|| fsample_url)
+        .or_else(|| ssample_resp.is_ok().then(|| ssample_url))
+        .unwrap_or_else(|| sample_url.to_string());
+
+    Ok(FetchedLink {
+        image_url: sample_url,
+        new_source: source_url,
+    })
 }
 
-async fn fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResult<String> {
+async fn _fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResult<FetchedLink> {
     let fxurl = Uri::builder()
         .scheme("https")
         .authority("d.fxtwitter.com")
@@ -190,16 +284,19 @@ async fn fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResul
         .ok_or_else(|| format!("twitter link {fxurl} did not return an image location"))?
         .to_str()?;
     // use webp format for direct twitter links since webp is cheaper
-    Ok(format!("{link}?format=webp"))
+    Ok(FetchedLink {
+        image_url: format!("{link}?format=webp"),
+        new_source: None,
+    })
 }
 
-fn get_conf(name: &str) -> String {
-    std::env::var(name).unwrap()
+fn get_conf(name: &str) -> Option<String> {
+    std::env::var(name).ok()
 }
 
 struct InternalAppState {
     // cached direct links to images
-    direct_links: DashMap<Uri, String>,
+    direct_links: DashMap<Uri, FetchedLink>,
     data: Mutex<Data>,
     http: reqwest::Client,
 }
@@ -217,7 +314,11 @@ impl AppState {
                 direct_links: Default::default(),
                 http: reqwest::ClientBuilder::new()
                     .redirect(reqwest::redirect::Policy::none())
-                    .user_agent(format!("{}/{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION")))
+                    .user_agent(format!(
+                        "{}/{}",
+                        env!("CARGO_PKG_NAME"),
+                        env!("CARGO_PKG_VERSION")
+                    ))
                     .build()
                     .unwrap(),
             }),
