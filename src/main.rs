@@ -21,7 +21,7 @@ mod error;
 
 #[tokio::main]
 async fn main() {
-    let arts_file_path = get_conf("ARTS_PATH").unwrap_or_else(|| "./utils/arts.txt".to_string());
+    let arts_file_path = get_conf("ARTS_PATH", "./utils/arts.txt");
     let arts = std::fs::read_to_string(&arts_file_path).unwrap();
     let state = AppState::new(Data::parse(&arts).unwrap());
 
@@ -87,12 +87,10 @@ const BODY_STYLE: &str =
 const ABOUT_STYLE: &str = "font-size: 1vmax; color: #ffffff;";
 
 fn get_page_head_common() -> PreEscaped<String> {
-    let title = get_conf("SITE_TITLE").unwrap_or_else(|| "random project moon art".to_string());
-    let embed_title =
-        get_conf("EMBED_TITLE").unwrap_or_else(|| "random project moon art".to_string());
-    let embed_content =
-        get_conf("EMBED_DESC").unwrap_or_else(|| "random project moon art".to_string());
-    let embed_color = get_conf("EMBED_COLOR").unwrap_or_else(|| "#ffffff".to_string());
+    let title = get_conf("SITE_TITLE", "random project moon art");
+    let embed_title = get_conf("EMBED_TITLE", "random project moon art");
+    let embed_content = get_conf("EMBED_DESC", "random project moon art");
+    let embed_color = get_conf("EMBED_COLOR", "#ffffff");
 
     maud::html! {
         meta charset="utf8";
@@ -292,8 +290,8 @@ async fn _fetch_twitter_image_link(http: &reqwest::Client, url: &Uri) -> AppResu
     })
 }
 
-fn get_conf(name: &str) -> Option<String> {
-    std::env::var(name).ok()
+fn get_conf(name: &str, default: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| default.to_owned())
 }
 
 struct InternalAppState {
