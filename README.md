@@ -1,4 +1,4 @@
-# [pm.gaze.systems](https://pm.gaze.systems)
+# [pm.gaze.systems](http://pm.gaze.systems)
 
 random project moon art :3
 
